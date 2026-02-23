@@ -1,8 +1,7 @@
-import pandas as pd
-from flask import send_file
-from flask import Flask, request, redirect, session
+from flask import Flask, request, redirect, session, send_file
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "bidstrike_secret"
@@ -17,7 +16,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # ======================
-# DATABASE MODELS
+# MODELS
 # ======================
 
 class Team(db.Model):
@@ -48,18 +47,18 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True)
     password = db.Column(db.String(200))
-    role = db.Column(db.String(20))  # "admin" or "team"
+    role = db.Column(db.String(20))
     team_id = db.Column(db.Integer, nullable=True)
 
 
-# ======================
-# ROUTES
-# ======================
+class AuctionState(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    current_player_id = db.Column(db.Integer)
+    round_number = db.Column(db.Integer, default=1)
 
-@app.route("/")
-def home():
-    return redirect("/login")
-
+# ======================
+# INIT ROUTE
+# ======================
 
 @app.route("/init")
 def init_db():
@@ -68,7 +67,6 @@ def init_db():
     if Team.query.first():
         return "Database already initialized!"
 
-    # Create Teams
     teams = [
         Team(name="Mumbai Mavericks", budget_total=100, budget_left=100),
         Team(name="Delhi Dynamos", budget_total=100, budget_left=100),
@@ -79,7 +77,6 @@ def init_db():
     db.session.add_all(teams)
     db.session.commit()
 
-    # Create Players
     players = [
         Player(name="Virat X", role="Batsman", base_price=10, points=90),
         Player(name="Boom Boom Y", role="Bowler", base_price=8, points=85),
@@ -91,7 +88,6 @@ def init_db():
 
     db.session.add_all(players)
 
-    # Create Admin User
     admin_user = User(
         username="admin",
         password=generate_password_hash("admin123"),
@@ -100,7 +96,6 @@ def init_db():
 
     db.session.add(admin_user)
 
-    # Create Team Users
     all_teams = Team.query.all()
     for team in all_teams:
         team_user = User(
@@ -111,14 +106,21 @@ def init_db():
         )
         db.session.add(team_user)
 
+    state = AuctionState(current_player_id=1, round_number=1)
+    db.session.add(state)
+
     db.session.commit()
 
     return "BidStrike Initialized Successfully!"
 
+# ======================
+# LOGIN
+# ======================
 
-# ======================
-# LOGIN SYSTEM
-# ======================
+@app.route("/")
+def home():
+    return redirect("/login")
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -137,16 +139,19 @@ def login():
             return "Invalid credentials!"
 
     return """
-        <h2>BidStrike Login</h2>
-        <form method="POST">
-            Username:<br>
-            <input type="text" name="username"><br><br>
-            Password:<br>
-            <input type="password" name="password"><br><br>
-            <button type="submit">Login</button>
-        </form>
+    <h2>BidStrike Login</h2>
+    <form method="POST">
+        Username:<br>
+        <input type="text" name="username"><br><br>
+        Password:<br>
+        <input type="password" name="password"><br><br>
+        <button type="submit">Login</button>
+    </form>
     """
 
+# ======================
+# DASHBOARD
+# ======================
 
 @app.route("/dashboard")
 def dashboard():
@@ -165,103 +170,51 @@ def dashboard():
         player_list.append(f"{player.name} - Bought for {purchase.sold_price}")
 
     return f"""
-<html>
-<head>
-    <title>{team.name} Dashboard</title>
-    <style>
-        body {{
-            background: #0f172a;
-            color: white;
-            font-family: Arial;
-            padding: 40px;
-        }}
-        h1 {{
-            color: gold;
-        }}
-        .card {{
-            background: #1e293b;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }}
-    </style>
-</head>
-<body>
-
     <h1>{team.name} Dashboard</h1>
-
-    <div class="card">
-        <h3>Budget Left: {team.budget_left}</h3>
-    </div>
-
-    <div class="card">
-        <h3>Your Players:</h3>
-        {'<br>'.join(player_list) if player_list else 'No players bought yet.'}
-    </div>
-
-    <a href="/logout">Logout</a>
-
+    <h3>Budget Left: {team.budget_left}</h3>
+    <h3>Your Players:</h3>
+    {'<br>'.join(player_list) if player_list else 'No players bought yet.'}
     <script>
-        setTimeout(function() {{
-            location.reload();
-        }}, 3000);
+        setTimeout(function(){{location.reload();}},3000);
     </script>
-
-</body>
-</html>
-"""
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/login")
-
+    """
 
 # ======================
 # ADMIN PANEL
 # ======================
 
 @app.route("/admin")
-def admin_dashboard():
-    if "user_id" not in session or session["role"] != "admin":
+def admin():
+    if session.get("role") != "admin":
         return redirect("/login")
 
     teams = Team.query.all()
     players = Player.query.filter_by(sold=False).all()
+    state = AuctionState.query.first()
+    current_player = Player.query.get(state.current_player_id)
 
     return f"""
-    <h1>⚡ BidStrike Admin Panel</h1>
+    <h1>Admin Panel</h1>
 
-    <form method="POST" action="/process_sale">
+    <h2>Current Player: {current_player.name}</h2>
 
-        <label>Player</label><br>
-        <select name="player_id">
-            {''.join([f'<option value="{p.id}">{p.name} | Points: {p.points}</option>' for p in players])}
-        </select>
-        <br><br>
+    <a href="/next">Next Player</a><br><br>
 
-        <label>Team</label><br>
-        <select name="team_id">
-            {''.join([f'<option value="{t.id}">{t.name} | Budget: {t.budget_left}</option>' for t in teams])}
-        </select>
-        <br><br>
-
-        <label>Sold Price</label><br>
-        <input type="number" name="price" required>
-        <br><br>
-
-        <button type="submit">SELL PLAYER</button>
+    <form method="POST" action="/sell">
+        Player ID:
+        <input name="player_id"><br>
+        Team ID:
+        <input name="team_id"><br>
+        Price:
+        <input name="price"><br>
+        <button type="submit">Sell</button>
     </form>
 
-    <br><br>
-    <a href="/reset">Reset Auction</a> |
-    <a href="/logout">Logout</a>
+    <br><a href="/present">Open Presentation</a>
     """
 
-
-@app.route("/process_sale", methods=["POST"])
-def process_sale():
+@app.route("/sell", methods=["POST"])
+def sell():
     if session.get("role") != "admin":
         return redirect("/login")
 
@@ -273,10 +226,10 @@ def process_sale():
     team = Team.query.get(team_id)
 
     if player.sold:
-        return "Player already sold!"
+        return "Already sold"
 
     if team.budget_left < price:
-        return "Not enough budget!"
+        return "Not enough budget"
 
     team.budget_left -= price
     team.total_points += player.points
@@ -291,204 +244,80 @@ def process_sale():
     db.session.add(purchase)
     db.session.commit()
 
-    return f"""
-<html>
-<head>
-    <title>SOLD</title>
-    <style>
-        body {{
-            margin: 0;
-            background: black;
-            color: gold;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: Arial;
-            flex-direction: column;
-            animation: flash 0.5s alternate 6;
-        }}
+    return redirect("/admin")
 
-        h1 {{
-            font-size: 80px;
-            margin: 0;
-        }}
-
-        h2 {{
-            font-size: 30px;
-            margin-top: 20px;
-            color: white;
-        }}
-
-        @keyframes flash {{
-            from {{ background-color: black; }}
-            to {{ background-color: #7f1d1d; }}
-        }}
-    </style>
-</head>
-<body>
-
-    <h1>🔥 SOLD! 🔥</h1>
-    <h2>{player.name} → {team.name}</h2>
-    <h2>For {price}</h2>
-
-    <script>
-        setTimeout(function(){{
-            window.location.href = "/admin";
-        }}, 3000);
-    </script>
-
-</body>
-</html>
-"""
-@app.route("/reveal")
-def reveal_results():
+@app.route("/next")
+def next_player():
     if session.get("role") != "admin":
         return redirect("/login")
 
-    teams = Team.query.order_by(Team.total_points.asc()).all()
+    state = AuctionState.query.first()
+    total_players = Player.query.count()
 
-    team_names = [team.name for team in teams]
-    team_points = [team.total_points for team in teams]
+    if state.current_player_id < total_players:
+        state.current_player_id += 1
+        db.session.commit()
+
+    return redirect("/admin")
+
+# ======================
+# PRESENTATION
+# ======================
+
+@app.route("/present")
+def present():
+    state = AuctionState.query.first()
+    player = Player.query.get(state.current_player_id)
+
+    if not player:
+        return "No player selected"
+
+    status = "LIVE"
+    if player.sold:
+        status = "SOLD"
 
     return f"""
     <html>
-    <head>
-        <title>BidStrike Final Reveal</title>
-        <style>
-            body {{
-                background: black;
-                color: white;
-                text-align: center;
-                font-family: Arial;
-                padding-top: 100px;
-            }}
-
-            h1 {{
-                color: gold;
-                font-size: 60px;
-            }}
-
-            .rank {{
-                font-size: 35px;
-                margin: 20px;
-                display: none;
-            }}
-
-            .winner {{
-                font-size: 55px;
-                color: #22c55e;
-                margin-top: 50px;
-                display: none;
-                animation: glow 1s infinite alternate;
-            }}
-
-            @keyframes glow {{
-                from {{ text-shadow: 0 0 10px #22c55e; }}
-                to {{ text-shadow: 0 0 25px #22c55e; }}
-            }}
-        </style>
-    </head>
-    <body>
-
-        <h1>🏆 BIDSTRIKE FINAL REVEAL 🏆</h1>
-
-        <div id="r4" class="rank"></div>
-        <div id="r3" class="rank"></div>
-        <div id="r2" class="rank"></div>
-        <div id="winner" class="winner"></div>
+    <body style="background:black;color:white;text-align:center;padding-top:50px;font-family:Arial;">
+        <h1 style="font-size:60px;color:gold;">{player.name}</h1>
+        <h2>{player.role}</h2>
+        <h2>Base Price: {player.base_price}</h2>
+        <h2>Points: {player.points}</h2>
+        <h2 style="color:#22c55e;">{status}</h2>
 
         <script>
-            let teams = {team_names};
-            let points = {team_points};
-
-            function revealRank(id, text, delay) {{
-                setTimeout(function() {{
-                    let el = document.getElementById(id);
-                    el.innerHTML = text;
-                    el.style.display = "block";
-                }}, delay);
-            }}
-
-            revealRank("r4", "4th Place: " + teams[0] + " - " + points[0] + " pts", 1000);
-            revealRank("r3", "3rd Place: " + teams[1] + " - " + points[1] + " pts", 3000);
-            revealRank("r2", "2nd Place: " + teams[2] + " - " + points[2] + " pts", 5000);
-
-            setTimeout(function() {{
-                let win = document.getElementById("winner");
-                win.innerHTML = "🎉 WINNER: " + teams[3] + " 🎉";
-                win.style.display = "block";
-            }}, 8000);
+            setTimeout(function(){{location.reload();}},2000);
         </script>
-
     </body>
     </html>
     """
 
-@app.route("/reset")
-def reset_auction():
-    if session.get("role") != "admin":
-        return redirect("/login")
+# ======================
+# REVEAL
+# ======================
 
-    Purchase.query.delete()
-
-    teams = Team.query.all()
-    for t in teams:
-        t.budget_left = t.budget_total
-        t.total_points = 0
-
-    players = Player.query.all()
-    for p in players:
-        p.sold = False
-
-    db.session.commit()
-
-    return "Auction Reset Successful!"
-
-@app.route("/export")
-def export_results():
-    if session.get("role") != "admin":
-        return redirect("/login")
-
+@app.route("/reveal")
+def reveal():
     teams = Team.query.order_by(Team.total_points.desc()).all()
 
-    # Summary sheet
-    summary_data = []
+    output = ""
+    position = 1
     for team in teams:
-        summary_data.append({
-            "Team": team.name,
-            "Total Points": team.total_points,
-            "Budget Left": team.budget_left
-        })
+        output += f"<h2>{position}. {team.name} - {team.total_points} Points</h2>"
+        position += 1
 
-    summary_df = pd.DataFrame(summary_data)
+    winner = teams[0].name if teams else "None"
 
-    file_path = "BidStrike_Results.xlsx"
-
-    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
-        summary_df.to_excel(writer, sheet_name="Summary", index=False)
-
-        # Individual team sheets
-        for team in teams:
-            purchases = Purchase.query.filter_by(team_id=team.id).all()
-
-            team_data = []
-            for purchase in purchases:
-                player = Player.query.get(purchase.player_id)
-                team_data.append({
-                    "Player": player.name,
-                    "Role": player.role,
-                    "Points": player.points,
-                    "Sold Price": purchase.sold_price
-                })
-
-            team_df = pd.DataFrame(team_data)
-            team_df.to_excel(writer, sheet_name=team.name[:30], index=False)
-
-    return send_file(file_path, as_attachment=True)
+    return f"""
+    <body style="background:black;color:white;text-align:center;padding-top:100px;">
+        <h1 style="color:gold;">Final Results</h1>
+        {output}
+        <h1 style="color:green;">Winner: {winner}</h1>
+    </body>
+    """
 
 # ======================
-# RUN SERVER
+# RUN
 # ======================
 
 if __name__ == "__main__":

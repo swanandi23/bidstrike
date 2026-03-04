@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Admin Panel</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="admin-container">
+
+<h1>Admin Panel</h1>
+
+<h2>Current Player: {{player.name}}</h2>
+
+<p>Base Price: {{player.base_price}} Cr</p>
+
+<form method="POST" action="/sell">
+
+<label>Team</label>
+
+<select name="team_id">
+{% for t in teams %}
+<option value="{{t.id}}">{{t.name}}</option>
+{% endfor %}
+</select>
+
+<label>Price (Cr)</label>
+<input name="price" required>
+
+<button>SELL PLAYER</button>
+
+</form>
+
+<br>
+
+<form method="POST" action="/unsold">
+<button style="background:red">MARK UNSOLD</button>
+</form>
+
+<br>
+
+<a href="/next">Next Player</a><br>
+<a href="/present">Presentation Screen</a>
+
+</div>
+
+</body>
+</html>

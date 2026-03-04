@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Team Dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="admin-container">
+
+<h1>{{team.name}}</h1>
+
+<h2>Budget Left: {{team.budget_left}} Cr</h2>
+
+<h3>Players Bought</h3>
+
+<ul>
+{% for p in players %}
+<li>{{p.name}} — {{p.price}} Cr</li>
+{% endfor %}
+</ul>
+
+</div>
+
+</body>
+</html>

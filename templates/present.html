@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>BidStrike Auction</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<h1 style="text-align:center;color:gold;font-size:70px;margin-top:30px;">
+BidStrike Auction
+</h1>
+
+<div class="player-card">
+
+<div class="player-name">
+{{player.name}}
+</div>
+
+<div class="role">
+{{player.role}}
+</div>
+
+<br>
+
+<div class="price">
+Base Price: {{player.base_price}} Cr
+</div>
+
+<div class="points">
+Points: {{player.points}} / 30
+</div>
+
+{% if sold_flag %}
+<div class="sold-banner">
+🔥 SOLD TO {{sold_team.short_name}} FOR {{sold_price}} Cr 🔥
+</div>
+
+<script>
+setTimeout(function(){
+window.location.href="/next"
+},3000)
+</script>
+{% endif %}
+
+
+{% if unsold_flag %}
+<div class="unsold-banner">
+❌ UNSOLD ❌
+</div>
+
+<script>
+setTimeout(function(){
+window.location.href="/next"
+},3000)
+</script>
+{% endif %}
+
+</div>
+
+<div class="team-board">
+
+<h3>Team Budgets</h3>
+
+{% for t in teams %}
+{{t.short_name}} : {{t.budget_left}} Cr <br>
+{% endfor %}
+
+</div>
+
+<script>
+setTimeout(()=>location.reload(),2000)
+</script>
+
+</body>
+</html>
